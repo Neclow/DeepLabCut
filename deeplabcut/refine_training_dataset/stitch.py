@@ -1,4 +1,6 @@
-#
+# (neil) IFNDEF 29.06
+# pylint: disable=invalid-name
+# (neil) ENDIF 29.06
 # DeepLabCut Toolbox (deeplabcut.org)
 # © A. & M.W. Mathis Labs
 # https://github.com/DeepLabCut/DeepLabCut
@@ -8,33 +10,35 @@
 #
 # Licensed under GNU Lesser General Public License v3.0
 #
+import os
+import pickle
+import re
+import shelve
+import warnings
+
+from collections import defaultdict
+from functools import partial
+from itertools import combinations, cycle
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import os
 import pandas as pd
-import pickle
-import re
 import scipy.linalg.interpolative as sli
-import shelve
-import warnings
-from collections import defaultdict
+from networkx.algorithms.flow import preflow_push
+from scipy.linalg import hankel
+from scipy.spatial.distance import directed_hausdorff
+from scipy.stats import mode
+from tqdm import trange
 
 import deeplabcut
 from deeplabcut.utils.auxfun_videos import VideoWriter
-from functools import partial
 from deeplabcut.pose_estimation_tensorflow.lib.trackingutils import (
     calc_iou,
     TRACK_METHODS,
 )
 from deeplabcut.utils import auxiliaryfunctions, auxfun_multianimal
-from itertools import combinations, cycle
-from networkx.algorithms.flow import preflow_push
-from pathlib import Path
-from scipy.linalg import hankel
-from scipy.spatial.distance import directed_hausdorff
-from scipy.stats import mode
-from tqdm import trange
 
 
 class Tracklet:
@@ -679,9 +683,14 @@ class TrackletStitcher:
                 w = weight_func(self._mapping_inv[node1], self._mapping_inv[node2])
                 self.G.edges[(node1, node2)]["weight"] = w
 
-    def stitch(self, add_back_residuals=True):
+    def stitch(self, add_back_residuals=True, errors="raise"):
         if self.G is None:
             raise ValueError("Inexistent graph. Call `build_graph` first")
+
+        # (neil) IFNDEF 18.07
+        if errors not in ("raise", "coerce"):
+            raise ValueError("invalid error value specified")
+        # (neil) ENDIF 18.07
 
         try:
             _, self.flow = nx.capacity_scaling(self.G)
@@ -751,6 +760,9 @@ class TrackletStitcher:
                                 self.residuals.append(t1)
                     paths.append(list(remaining_nodes))
                 elif incomplete_tracks > 1:
+                    # (neil) IFNDEF 29.06
+                    warnings.warn(f"Found {incomplete_tracks} incomplete tracks.")
+                    # (neil) ENDIF 29.06
                     # Rebuild a full graph from the remaining nodes without
                     # temporal constraint on what tracklets can be stitched together.
                     self.build_graph(list(remaining_nodes), max_gap=np.inf)
@@ -763,10 +775,22 @@ class TrackletStitcher:
                 warnings.warn(f"Only {len(self.paths)} tracks could be reconstructed.")
 
         finally:
+            # if self.paths is None:
+            #     raise ValueError(
+            #         f"Could not reconstruct {self.n_tracks} tracks from the tracklets given."
+            #     )
+            # (neil) IFNDEF 18.07
             if self.paths is None:
-                raise ValueError(
-                    f"Could not reconstruct {self.n_tracks} tracks from the tracklets given."
-                )
+                message = f"Could not reconstruct {self.n_tracks} tracks from the tracklets given."
+                if errors == "raise":
+                    raise ValueError(message)
+                else:  # errors == "coerce"
+                    warnings.warn(
+                        f"{message}. Ignoring those incomplete tracks, but this might produce weird results!",
+                        UserWarning,
+                    )
+                    self.n_tracks -= incomplete_tracks
+            # (neil) ENDIF 18.07
 
             self.tracks = np.asarray([sum(path) for path in self.paths if path])
             if add_back_residuals:
@@ -868,7 +892,7 @@ class TrackletStitcher:
             temp = np.full((self.n_frames, flat_data.shape[1]), np.nan)
             temp[track.inds - self._first_frame] = flat_data
             data.append(temp)
-        
+
         # If there isn't a track for each animal, fill in the dataframe with NaNs
         missing_tracks = self.n_tracks - len(self.tracks)
         if missing_tracks > 0:
@@ -880,7 +904,10 @@ class TrackletStitcher:
     def format_df(self, animal_names=None):
         data = self.concatenate_data()
         if not animal_names or len(animal_names) != self.n_tracks:
-            animal_names = [f"ind{i}" for i in range(1, self.n_tracks + 1)]
+            # (neil) IFNDEF 29.06
+            animal_names = [f"individual{i}" for i in range(1, self.n_tracks + 1)]
+            # animal_names = [f"ind{i}" for i in range(1, self.n_tracks + 1)]
+            # (neil) ENDIF 29.06
         coords = ["x", "y", "likelihood"]
         n_multi_bpts = data.shape[1] // (len(animal_names) * len(coords))
         n_unique_bpts = 0 if self.single is None else self.single.data.shape[1]
@@ -1044,7 +1071,8 @@ def stitch_tracklets(
         A list of strings containing the full paths to videos for analysis or a path to the directory, where all the videos with same extension are stored.
 
     videotype: string, optional
-        Checks for the extension of the video in case the input to the video is a directory.\n Only videos with this extension are analyzed.
+        Checks for the extension of the video in case the input to the video is a directory.
+        Only videos with this extension are analyzed.
         If left unspecified, videos with common extensions ('avi', 'mp4', 'mov', 'mpeg', 'mkv') are kept.
 
     shuffle: int, optional
@@ -1164,7 +1192,7 @@ def stitch_tracklets(
         nframe = len(VideoWriter(video))
         videofolder = str(Path(video).parents[0])
         dest = destfolder or videofolder
-        deeplabcut.utils.auxiliaryfunctions.attempt_to_make_folder(dest)
+        deeplabcut.utils.auxiliaryfunctions.attempttomakefolder(dest)
         vname = Path(video).stem
 
         feature_dict_path = os.path.join(
@@ -1176,10 +1204,10 @@ def stitch_tracklets(
 
             try:
                 feature_dict = shelve.open(feature_dict_path, flag="r")
-            except dbm.error:
+            except dbm.error as exc:
                 raise FileNotFoundError(
                     f"{feature_dict_path} does not exist. Did you run transformer_reID()?"
-                )
+                ) from exc
 
         dataname = os.path.join(dest, vname + DLCscorer + ".h5")
 
@@ -1192,6 +1220,12 @@ def stitch_tracklets(
             with_id = any(tracklet.identity != -1 for tracklet in stitcher)
             if with_id and weight_func is None:
                 # Add in identity weighing before building the graph
+                # (neil) IFNDEF 29.06
+                # weight_func = lambda t1, t2: (
+                #     -0.99 * (t1.identity == t2.identity) + 1
+                # ) * stitcher.calculate_edge_weight(t1, t2)
+                # (neil) ENDIF 29.06
+
                 def weight_func(t1, t2):
                     w = 0.01 if t1.identity == t2.identity else 1
                     return w * stitcher.calculate_edge_weight(t1, t2)
