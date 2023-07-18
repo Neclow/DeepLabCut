@@ -106,6 +106,7 @@ def evaluate_multianimal_full(
     comparisonbodyparts="all",
     gputouse=None,
     modelprefix="",
+    overwrite_existing_results=False
 ):
     from deeplabcut.pose_estimation_tensorflow.core import (
         predict,
@@ -164,7 +165,7 @@ def evaluate_multianimal_full(
     )
     colors = visualization.get_cmap(len(comparisonbodyparts), name=cfg["colormap"])
     # Make folder for evaluation
-    auxiliaryfunctions.attempt_to_make_folder(
+    auxiliaryfunctions.attempttomakefolder(
         str(cfg["project_path"] + "/evaluation-results/")
     )
     for shuffle in Shuffles:
@@ -226,7 +227,7 @@ def evaluate_multianimal_full(
                     )
                 ),
             )
-            auxiliaryfunctions.attempt_to_make_folder(evaluationfolder, recursive=True)
+            auxiliaryfunctions.attempttomakefolder(evaluationfolder, recursive=True)
             # path_train_config = modelfolder / 'train' / 'pose_cfg.yaml'
 
             # Check which snapshots are available and sort them by # iterations
@@ -305,11 +306,14 @@ def evaluate_multianimal_full(
                             str(evaluationfolder),
                             "LabeledImages_" + DLCscorer + "_" + Snapshots[snapindex],
                         )
-                        auxiliaryfunctions.attempt_to_make_folder(foldername)
+                        auxiliaryfunctions.attempttomakefolder(foldername)
                         if plotting == "bodypart":
                             fig, ax = visualization.create_minimal_figure()
 
-                    if os.path.isfile(data_path):
+                    # (neil) IFNDEF 18.07
+                    # if os.path.isfile(data_path):
+                    if os.path.isfile(data_path) and not overwrite_existing_results:
+                    # (neil) ENDIF 18.07
                         print("Model already evaluated.", resultsfilename)
                     else:
                         (
@@ -505,26 +509,43 @@ def evaluate_multianimal_full(
                             print(string.format(*results))
 
                             print("##########################################")
+                            # (neil) IFNDEF 18.07
                             print(
-                                "Average Euclidean distance to GT per individual (in pixels; test-only)"
+                                "Average +/- SD Euclidean distance to GT per individual (in pixels; test-only)"
                             )
+                            # print(
+                            #     error_masked.iloc[testIndices]
+                            #     .groupby("individuals", axis=1)
+                            #     .mean()
+                            #     .mean()
+                            #     .to_string()
+                            # )
                             print(
                                 error_masked.iloc[testIndices]
                                 .groupby("individuals", axis=1)
                                 .mean()
-                                .mean()
+                                .agg(lambda x: f"{x.mean():.2f} +/- {x.std():.2f}")
                                 .to_string()
                             )
+
                             print(
-                                "Average Euclidean distance to GT per bodypart (in pixels; test-only)"
+                                "Average +/- SD Euclidean distance to GT per bodypart (in pixels; test-only)"
                             )
                             print(
                                 error_masked.iloc[testIndices]
                                 .groupby("bodyparts", axis=1)
                                 .mean()
-                                .mean()
+                                .agg(lambda x: f"{x.mean():.2f} +/- {x.std():.2f}")
                                 .to_string()
                             )
+                            # print(
+                            #     error_masked.iloc[testIndices]
+                            #     .groupby("bodyparts", axis=1)
+                            #     .mean()
+                            #     .mean()
+                            #     .to_string()
+                            # )
+                            # (neil) ENDIF 18.07
 
                         PredicteData["metadata"] = {
                             "nms radius": dlc_cfg["nmsradius"],

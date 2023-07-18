@@ -504,6 +504,9 @@ def evaluate_network(
     gputouse=None,
     rescale=False,
     modelprefix="",
+    # (neil) IFNDEF 18.07
+    overwrite_existing_results=False,
+    # (neil) ENDIF 18.07
 ):
     """Evaluates the network.
 
@@ -609,6 +612,9 @@ def evaluate_network(
             comparisonbodyparts=comparisonbodyparts,
             gputouse=gputouse,
             modelprefix=modelprefix,
+            # (neil) IFNDEF 18.07
+            overwrite_existing_results=overwrite_existing_results,
+            # (neil) ENDIF 18.07
         )
     else:
         from deeplabcut.utils.auxfun_videos import imread, imresize
@@ -669,7 +675,7 @@ def evaluate_network(
             )
         )
         # Make folder for evaluation
-        auxiliaryfunctions.attempt_to_make_folder(
+        auxiliaryfunctions.attempttomakefolder(
             str(cfg["project_path"] + "/evaluation-results/")
         )
         for shuffle in Shuffles:
@@ -720,7 +726,7 @@ def evaluate_network(
                         )
                     ),
                 )
-                auxiliaryfunctions.attempt_to_make_folder(evaluationfolder, recursive=True)
+                auxiliaryfunctions.attempttomakefolder(evaluationfolder, recursive=True)
                 # path_train_config = modelfolder / 'train' / 'pose_cfg.yaml'
 
                 # Check which snapshots are available and sort them by # iterations
@@ -940,7 +946,7 @@ def evaluate_network(
                                 + "_"
                                 + Snapshots[snapindex],
                             )
-                            auxiliaryfunctions.attempt_to_make_folder(foldername)
+                            auxiliaryfunctions.attempttomakefolder(foldername)
                             Plotting(
                                 cfg,
                                 comparisonbodyparts,
@@ -970,7 +976,7 @@ def evaluate_network(
                                 print(
                                     "Plotting...(attention scale might be inconsistent in comparison to when data was analyzed; i.e. if you used rescale)"
                                 )
-                                auxiliaryfunctions.attempt_to_make_folder(foldername)
+                                auxiliaryfunctions.attempttomakefolder(foldername)
                                 Plotting(
                                     cfg,
                                     comparisonbodyparts,

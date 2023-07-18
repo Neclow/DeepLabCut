@@ -288,6 +288,9 @@ def analyze_videos(
     calibrate=False,
     identity_only=False,
     use_openvino="CPU" if is_openvino_available else None,
+    # (neil) IFNDEF 29.06
+    **kwargs,
+    # (neil) ENDIF 29.06
 ):
     """Makes prediction based on a trained network.
 
@@ -637,6 +640,10 @@ def analyze_videos(
                     use_shelve=use_shelve,
                 )
                 if auto_track:  # tracker type is taken from default in cfg
+                    # (neil) IFNDEF 29.06
+                    convert_kw = kwargs.pop("convert_kw", {})
+                    stitch_kw = kwargs.pop("stitch_kw", {})
+                    # (neil) ENDIF 29.06
                     convert_detections2tracklets(
                         config,
                         [video],
@@ -647,6 +654,9 @@ def analyze_videos(
                         modelprefix=modelprefix,
                         calibrate=calibrate,
                         identity_only=identity_only,
+                        # (neil) IFNDEF 29.06
+                        **convert_kw
+                        # (neil) ENDIF 29.06
                     )
                     stitch_tracklets(
                         config,
@@ -658,6 +668,9 @@ def analyze_videos(
                         n_tracks=n_tracks,
                         modelprefix=modelprefix,
                         save_as_csv=save_as_csv,
+                        # (neil) IFNDEF 29.06
+                        **stitch_kw
+                        # (neil) ENDIF 29.06
                     )
         else:
             for video in Videos:
@@ -1014,7 +1027,7 @@ def AnalyzeVideo(
 
     if destfolder is None:
         destfolder = str(Path(video).parents[0])
-    auxiliaryfunctions.attempt_to_make_folder(destfolder)
+    auxiliaryfunctions.attempttomakefolder(destfolder)
     vname = Path(video).stem
     try:
         _ = auxiliaryfunctions.load_analyzed_data(destfolder, vname, DLCscorer)
@@ -1738,7 +1751,7 @@ def convert_detections2tracklets(
             videofolder = str(Path(video).parents[0])
             if destfolder is None:
                 destfolder = videofolder
-            auxiliaryfunctions.attempt_to_make_folder(destfolder)
+            auxiliaryfunctions.attempttomakefolder(destfolder)
             vname = Path(video).stem
             dataname = os.path.join(destfolder, vname + DLCscorer + ".h5")
             data, metadata = auxfun_multianimal.LoadFullMultiAnimalData(dataname)
