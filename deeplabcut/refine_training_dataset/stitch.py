@@ -687,11 +687,6 @@ class TrackletStitcher:
         if self.G is None:
             raise ValueError("Inexistent graph. Call `build_graph` first")
 
-        # (neil) IFNDEF 18.07
-        if errors not in ("raise", "coerce"):
-            raise ValueError("invalid error value specified")
-        # (neil) ENDIF 18.07
-
         try:
             _, self.flow = nx.capacity_scaling(self.G)
             self.paths = self.reconstruct_paths()
@@ -761,36 +756,37 @@ class TrackletStitcher:
                     paths.append(list(remaining_nodes))
                 elif incomplete_tracks > 1:
                     # (neil) IFNDEF 29.06
-                    warnings.warn(f"Found {incomplete_tracks} incomplete tracks.")
+                    if errors != "ignore":
+                        warnings.warn(
+                            f"Found {incomplete_tracks} incomplete tracks.", UserWarning
+                        )
+
+                        # Rebuild a full graph from the remaining nodes without
+                        # temporal constraint on what tracklets can be stitched together.
+                        self.build_graph(list(remaining_nodes), max_gap=np.inf)
+                        self.G.nodes["source"]["demand"] = -incomplete_tracks
+                        self.G.nodes["sink"]["demand"] = incomplete_tracks
+                        _, self.flow = nx.capacity_scaling(self.G)
+                        paths += self.reconstruct_paths()
+                    else:
+                        warnings.warn(
+                            "Ignoring the incomplete tracks, but this might produce weird results!",
+                            UserWarning,
+                        )
                     # (neil) ENDIF 29.06
-                    # Rebuild a full graph from the remaining nodes without
-                    # temporal constraint on what tracklets can be stitched together.
-                    self.build_graph(list(remaining_nodes), max_gap=np.inf)
-                    self.G.nodes["source"]["demand"] = -incomplete_tracks
-                    self.G.nodes["sink"]["demand"] = incomplete_tracks
-                    _, self.flow = nx.capacity_scaling(self.G)
-                    paths += self.reconstruct_paths()
+
             self.paths = paths
             if len(self.paths) != self.n_tracks:
-                warnings.warn(f"Only {len(self.paths)} tracks could be reconstructed.")
+                warnings.warn(
+                    f"Only {len(self.paths)} tracks could be reconstructed.",
+                    UserWarning,
+                )
 
         finally:
-            # if self.paths is None:
-            #     raise ValueError(
-            #         f"Could not reconstruct {self.n_tracks} tracks from the tracklets given."
-            #     )
-            # (neil) IFNDEF 18.07
             if self.paths is None:
-                message = f"Could not reconstruct {self.n_tracks} tracks from the tracklets given."
-                if errors == "raise":
-                    raise ValueError(message)
-                else:  # errors == "coerce"
-                    warnings.warn(
-                        f"{message}. Ignoring those incomplete tracks, but this might produce weird results!",
-                        UserWarning,
-                    )
-                    self.n_tracks -= incomplete_tracks
-            # (neil) ENDIF 18.07
+                raise ValueError(
+                    f"Could not reconstruct {self.n_tracks} tracks from the tracklets given."
+                )
 
             self.tracks = np.asarray([sum(path) for path in self.paths if path])
             if add_back_residuals:
@@ -1057,6 +1053,9 @@ def stitch_tracklets(
     output_name="",
     transformer_checkpoint="",
     save_as_csv=False,
+    # (neil) IFNDEF 19.07
+    errors="raise",
+    # (neil) IFNDEF 19.07
 ):
     """
     Stitch sparse tracklets into full tracks via a graph-based,
@@ -1147,6 +1146,11 @@ def stitch_tracklets(
     if not vids:
         print("No video(s) found. Please check your path!")
         return
+
+    # (neil) IFNDEF 18.07
+    if errors not in ("raise", "ignore"):
+        raise ValueError("invalid error value specified")
+    # (neil) ENDIF 18.07
 
     cfg = auxiliaryfunctions.read_config(config_path)
     track_method = auxfun_multianimal.get_track_method(cfg, track_method=track_method)
@@ -1240,7 +1244,10 @@ def stitch_tracklets(
             else:
                 stitcher.build_graph(max_gap=max_gap, weight_func=weight_func)
 
-            stitcher.stitch()
+            print(stitcher.G.nodes["source"]["demand"])
+            print(stitcher.G.nodes["sink"]["demand"])
+
+            stitcher.stitch(errors=errors)
             if transformer_checkpoint:
                 stitcher.write_tracks(
                     output_name=output_name,
